@@ -8,6 +8,11 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 model Deck {
   id          String   @id @default(cuid())
   title       String
@@ -73,6 +78,7 @@ model User {
   emailVerified DateTime?
   password      String?
   image         String?
+  role          UserRole  @default(USER)
   accounts      Account[]
   sessions      Session[]
   decks         Deck[]

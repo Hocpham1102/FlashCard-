@@ -1,10 +1,12 @@
+import { LoginButton } from "@/components/LoginButton";
+import { NavBar } from "@/components/NavBar";
+import { NavMenu } from "@/components/NavMenu";
+import { Providers } from "@/components/Providers";
+import { authOptions } from "@/lib/auth";
 import type { Metadata } from "next";
+import { getServerSession } from "next-auth";
 import { Inter } from "next/font/google";
 import Link from "next/link";
-import { Providers } from "@/components/Providers";
-import { LoginButton } from "@/components/LoginButton";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -26,22 +28,20 @@ export default async function RootLayout({
         className={`${inter.className} antialiased bg-gray-50 min-h-screen flex flex-col`}
       >
         <Providers>
-          <nav className="bg-indigo-600 text-white shadow-md">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex items-center justify-between h-16">
-                <Link
-                  href={session ? "/dashboard" : "/"}
-                  className="text-xl font-bold tracking-tight hover:text-indigo-100 transition-colors"
-                >
-                  FlashCard
-                </Link>
-                <LoginButton />
-              </div>
-            </div>
-          </nav>
+          <NavBar>
+            <Link
+              href={session ? "/dashboard" : "/"}
+              className="text-xl font-bold tracking-tight hover:text-indigo-100 transition-colors"
+            >
+              FlashCard
+            </Link>
+            <NavMenu />
+            <LoginButton />
+          </NavBar>
           <main className="flex-1">{children}</main>
         </Providers>
       </body>
     </html>
   );
 }
+

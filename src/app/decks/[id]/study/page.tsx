@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  isSpeechSynthesisSupported,
+  playFeedbackTone,
+  speakText,
+  stopSpeaking,
+} from "@/lib/studyAudio";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -52,6 +58,63 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
+function normalizeAnswerText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function isAnswerCorrect(userInput: string, expectedAnswer: string) {
+  const normalizedUser = normalizeAnswerText(userInput);
+  const normalizedExpected = normalizeAnswerText(expectedAnswer);
+
+  if (!normalizedUser || !normalizedExpected) {
+    return false;
+  }
+
+  if (normalizedUser === normalizedExpected) {
+    return true;
+  }
+
+  const variants = normalizedExpected
+    .split(/[,;\/|\n]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (!variants.includes(normalizedExpected)) {
+    variants.push(normalizedExpected);
+  }
+
+  const userTokens = normalizedUser
+    .split(" ")
+    .filter((token) => token.length >= 2);
+
+  return variants.some((variant) => {
+    if (variant === normalizedUser) {
+      return true;
+    }
+
+    // Allow partial match when user entered a meaningful fragment.
+    if (normalizedUser.length >= 3 && variant.includes(normalizedUser)) {
+      return true;
+    }
+
+    // Allow cases like "go school" for expected "go to school".
+    if (
+      userTokens.length > 0 &&
+      userTokens.every((token) => variant.includes(token))
+    ) {
+      return true;
+    }
+
+    return false;
+  });
+}
+
 export default function StudyPage() {
   const params = useParams();
   const deckId = params.id as string;
@@ -63,6 +126,7 @@ export default function StudyPage() {
   const [userAnswer, setUserAnswer] = useState("");
   const [hasAnswered, setHasAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
 
   const loadStudySession = useCallback(async () => {
     try {
@@ -104,6 +168,14 @@ export default function StudyPage() {
     loadStudySession();
   }, [loadStudySession]);
 
+  useEffect(() => {
+    setSpeechSupported(isSpeechSynthesisSupported());
+
+    return () => {
+      stopSpeaking();
+    };
+  }, []);
+
   async function submitReview(cardId: string, quality: number) {
     try {
       await fetch(`/api/cards/${cardId}/review`, {
@@ -122,9 +194,7 @@ export default function StudyPage() {
     const { cards, currentIndex } = studyState;
     const currentCard = cards[currentIndex];
 
-    const normalizedUser = userAnswer.trim().toLowerCase();
-    const normalizedBack = currentCard.back.trim().toLowerCase();
-    const correct = normalizedUser === normalizedBack;
+    const correct = isAnswerCorrect(userAnswer, currentCard.back);
 
     setIsCorrect(correct);
     setHasAnswered(true);
@@ -141,9 +211,18 @@ export default function StudyPage() {
       stats: newStats,
     });
 
+    playFeedbackTone(correct ? "correct" : "wrong");
+
     // Submit review in background
     const quality = correct ? 4 : 0;
     submitReview(currentCard._id, quality);
+  }
+
+  function handleSpeakFront() {
+    if (studyState.status !== "studying") return;
+
+    const card = studyState.cards[studyState.currentIndex];
+    speakText(card.front, { lang: "en-US", rate: 0.95, pitch: 1 });
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -154,6 +233,8 @@ export default function StudyPage() {
 
   function handleNext() {
     if (studyState.status !== "studying") return;
+
+    stopSpeaking();
 
     const { cards, currentIndex, stats } = studyState;
     const nextIndex = currentIndex + 1;
@@ -292,7 +373,7 @@ export default function StudyPage() {
     );
   }
 
-  const { deck, cards, currentIndex, stats } = studyState;
+  const { deck, cards, currentIndex } = studyState;
   const currentCard = cards[currentIndex];
   const totalCards = cards.length;
   const completedCards = currentIndex;
@@ -352,6 +433,22 @@ export default function StudyPage() {
               <p className="text-lg text-gray-700 text-center whitespace-pre-wrap">
                 {currentCard.front}
               </p>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSpeakFront();
+                }}
+                disabled={!speechSupported}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+                type="button"
+              >
+                <span aria-hidden="true">&#128266;</span>
+                <span>
+                  {speechSupported
+                    ? "Listen pronunciation"
+                    : "Audio unavailable"}
+                </span>
+              </button>
               {!hasAnswered && (
                 <p className="text-sm text-gray-400 mt-6">
                   Type your answer below
@@ -374,7 +471,7 @@ export default function StudyPage() {
                 <div className="mt-6 text-center">
                   {isCorrect ? (
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-emerald-100 text-emerald-700">
-                      Correct!
+                      Correct
                     </span>
                   ) : (
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-rose-100 text-rose-700">
@@ -399,6 +496,9 @@ export default function StudyPage() {
               className="w-full px-4 py-3 text-lg border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm"
               autoFocus
             />
+            <p className="mt-2 text-xs text-gray-500">
+              Tip: You can type the main keyword(s) in the expected answer.
+            </p>
             <button
               onClick={handleSubmitAnswer}
               disabled={userAnswer.trim().length === 0}
@@ -409,48 +509,9 @@ export default function StudyPage() {
           </div>
         )}
 
-        {/* Feedback + Next Button */}
+        {/* Next Button */}
         {hasAnswered && (
           <div className="mt-6 w-full max-w-lg mx-auto transition-all duration-300 opacity-100 translate-y-0">
-            {/* Feedback message (also shown on front when flipped back) */}
-            <div className="text-center mb-4">
-              {isCorrect ? (
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold">
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  Correct!
-                </div>
-              ) : (
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold">
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                  Wrong! The answer is: {currentCard.back}
-                </div>
-              )}
-            </div>
-
             <button
               onClick={handleNext}
               className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl shadow transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
