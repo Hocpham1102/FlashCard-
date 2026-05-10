@@ -1,13 +1,13 @@
 import { canAccessAdminArea } from "@/lib/admin";
 import { prisma } from "@/lib/prisma"; // Adjust path if necessary
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma) as any, // Cast to any to avoid type mismatch between NextAuth v4 and Auth.js Prisma adapter
+  adapter: PrismaAdapter(prisma),
   providers: [
     CredentialsProvider({
       name: "Credentials",

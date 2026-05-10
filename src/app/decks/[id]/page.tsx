@@ -18,6 +18,13 @@ interface CardItem {
   deckId: string;
   front: string;
   back: string;
+  phonetic: string;
+  example: string;
+  partOfSpeech: string;
+  synonyms: string;
+  antonyms: string;
+  collocations: string;
+  toeicPart: string;
   easeFactor: number;
   interval: number;
   repetitions: number;
@@ -45,6 +52,13 @@ export default function DeckDetailPage() {
 
   const [newFront, setNewFront] = useState("");
   const [newBack, setNewBack] = useState("");
+  const [newPhonetic, setNewPhonetic] = useState("");
+  const [newExample, setNewExample] = useState("");
+  const [newPartOfSpeech, setNewPartOfSpeech] = useState("");
+  const [newSynonyms, setNewSynonyms] = useState("");
+  const [newCollocations, setNewCollocations] = useState("");
+  const [newToeicPart, setNewToeicPart] = useState("");
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [isAddingCard, setIsAddingCard] = useState(false);
 
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
@@ -164,13 +178,28 @@ export default function DeckDetailPage() {
       const res = await fetch(`/api/decks/${deckId}/cards`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ front: newFront.trim(), back: newBack.trim() }),
+        body: JSON.stringify({
+          front: newFront.trim(),
+          back: newBack.trim(),
+          phonetic: newPhonetic.trim(),
+          example: newExample.trim(),
+          partOfSpeech: newPartOfSpeech.trim(),
+          synonyms: newSynonyms.trim(),
+          collocations: newCollocations.trim(),
+          toeicPart: newToeicPart.trim(),
+        }),
       });
       if (!res.ok) {
         throw new Error("Failed to add card");
       }
       setNewFront("");
       setNewBack("");
+      setNewPhonetic("");
+      setNewExample("");
+      setNewPartOfSpeech("");
+      setNewSynonyms("");
+      setNewCollocations("");
+      setNewToeicPart("");
       await fetchCards();
       if (deck) {
         setDeck({ ...deck, cardCount: deck.cardCount + 1 });
@@ -244,10 +273,11 @@ export default function DeckDetailPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Link
-        href="/"
-        className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800 mb-6 transition-colors"
+        href="/dashboard"
+        className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-4 py-2 rounded-full shadow-sm hover:shadow-md transition-all mb-6 w-max"
       >
-        <span className="mr-1">&larr;</span> Back to Home
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+        Quay lại Dashboard
       </Link>
 
       {deckLoading && (
@@ -337,25 +367,25 @@ export default function DeckDetailPage() {
                     </span>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full sm:w-auto">
                   <Link
                     href={`/decks/${deckId}/study`}
-                    className="inline-flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-6 rounded-xl transition-colors shadow-sm"
                   >
                     Study
                   </Link>
                   <button
                     onClick={() => setIsEditingDeck(true)}
-                    className="inline-flex items-center justify-center bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-semibold py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold py-2.5 px-6 rounded-xl transition-colors shadow-sm"
                   >
                     Edit
                   </button>
                   <button
                     onClick={handleDeleteDeck}
                     disabled={isDeletingDeck}
-                    className="inline-flex items-center justify-center bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-semibold py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 disabled:opacity-50"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold py-2.5 px-6 rounded-xl transition-colors disabled:opacity-50 shadow-sm"
                   >
-                    {isDeletingDeck ? "Deleting..." : "Delete Deck"}
+                    {isDeletingDeck ? "Deleting..." : "Delete"}
                   </button>
                 </div>
               </div>
@@ -373,47 +403,61 @@ export default function DeckDetailPage() {
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>
-              <label
-                htmlFor="new-front"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Front
-              </label>
-              <input
-                id="new-front"
-                type="text"
-                value={newFront}
-                onChange={(e) => setNewFront(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
-                placeholder="Front side"
-              />
+              <label htmlFor="new-front" className="block text-sm font-medium text-gray-700 mb-1">Từ vựng (Front) *</label>
+              <input id="new-front" type="text" value={newFront} onChange={(e) => setNewFront(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900" placeholder="VD: negotiate" />
             </div>
             <div>
-              <label
-                htmlFor="new-back"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Back
-              </label>
-              <input
-                id="new-back"
-                type="text"
-                value={newBack}
-                onChange={(e) => setNewBack(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
-                placeholder="Back side"
-              />
+              <label htmlFor="new-back" className="block text-sm font-medium text-gray-700 mb-1">Nghĩa (Back) *</label>
+              <input id="new-back" type="text" value={newBack} onChange={(e) => setNewBack(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900" placeholder="VD: thương lượng, đàm phán" />
             </div>
           </div>
+
+          {/* Toggle advanced fields */}
+          <button type="button" onClick={() => setShowAdvancedFields(!showAdvancedFields)} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-3 flex items-center gap-1">
+            <svg className={`w-4 h-4 transition-transform ${showAdvancedFields ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            {showAdvancedFields ? 'Ẩn thông tin nâng cao' : 'Thêm thông tin nâng cao (phiên âm, ví dụ, ...)'}
+          </button>
+
+          {showAdvancedFields && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+              <div>
+                <label htmlFor="new-phonetic" className="block text-xs font-medium text-gray-600 mb-1">Phiên âm IPA</label>
+                <input id="new-phonetic" type="text" value={newPhonetic} onChange={(e) => setNewPhonetic(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 text-sm" placeholder="/nɪˈɡoʊ.ʃi.eɪt/" />
+              </div>
+              <div>
+                <label htmlFor="new-pos" className="block text-xs font-medium text-gray-600 mb-1">Loại từ</label>
+                <select id="new-pos" value={newPartOfSpeech} onChange={(e) => setNewPartOfSpeech(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 text-sm">
+                  <option value="">-- Chọn --</option>
+                  <option value="noun">Noun (Danh từ)</option>
+                  <option value="verb">Verb (Động từ)</option>
+                  <option value="adjective">Adjective (Tính từ)</option>
+                  <option value="adverb">Adverb (Trạng từ)</option>
+                  <option value="phrase">Phrase (Cụm từ)</option>
+                  <option value="preposition">Preposition (Giới từ)</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="new-example" className="block text-xs font-medium text-gray-600 mb-1">Ví dụ câu</label>
+                <input id="new-example" type="text" value={newExample} onChange={(e) => setNewExample(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 text-sm" placeholder="We need to negotiate the contract terms." />
+              </div>
+              <div>
+                <label htmlFor="new-synonyms" className="block text-xs font-medium text-gray-600 mb-1">Từ đồng nghĩa</label>
+                <input id="new-synonyms" type="text" value={newSynonyms} onChange={(e) => setNewSynonyms(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 text-sm" placeholder="bargain, discuss, mediate" />
+              </div>
+              <div>
+                <label htmlFor="new-collocations" className="block text-xs font-medium text-gray-600 mb-1">Collocations</label>
+                <input id="new-collocations" type="text" value={newCollocations} onChange={(e) => setNewCollocations(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 text-sm" placeholder="negotiate a deal, negotiate terms" />
+              </div>
+              <div>
+                <label htmlFor="new-toeicpart" className="block text-xs font-medium text-gray-600 mb-1">TOEIC Part</label>
+                <input id="new-toeicpart" type="text" value={newToeicPart} onChange={(e) => setNewToeicPart(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 text-sm" placeholder="Part 5, Part 7" />
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={isAddingCard || !newFront.trim() || !newBack.trim()}
-              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-            >
-              {isAddingCard ? "Adding..." : "Add Card"}
+            <button type="submit" disabled={isAddingCard || !newFront.trim() || !newBack.trim()} className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+              {isAddingCard ? "Đang thêm..." : "Thêm thẻ"}
             </button>
           </div>
         </form>
@@ -510,11 +554,14 @@ export default function DeckDetailPage() {
                         </>
                       ) : (
                         <>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-pre-wrap">
-                            {card.front}
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            <div className="font-medium">{card.front}</div>
+                            {card.phonetic && <div className="text-xs text-gray-400">{card.phonetic}</div>}
+                            {card.partOfSpeech && <span className="inline-block mt-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-semibold rounded">{card.partOfSpeech}</span>}
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 whitespace-pre-wrap">
-                            {card.back}
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            <div>{card.back}</div>
+                            {card.example && <div className="text-xs text-gray-400 mt-1 italic">Ex: {card.example}</div>}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-3">

@@ -2,6 +2,8 @@ import { LoginButton } from "@/components/LoginButton";
 import { NavBar } from "@/components/NavBar";
 import { NavMenu } from "@/components/NavMenu";
 import { Providers } from "@/components/Providers";
+import { SoundToggle } from "@/components/SoundToggle";
+import { UserStatsDisplay } from "@/components/UserStatsDisplay";
 import { authOptions } from "@/lib/auth";
 import type { Metadata } from "next";
 import { getServerSession } from "next-auth";
@@ -36,7 +38,11 @@ export default async function RootLayout({
               FlashCard
             </Link>
             <NavMenu />
-            <LoginButton />
+            <div className="flex items-center gap-2 sm:gap-4">
+              <SoundToggle />
+              <UserStatsDisplay />
+              <LoginButton />
+            </div>
           </NavBar>
           <main className="flex-1">{children}</main>
         </Providers>

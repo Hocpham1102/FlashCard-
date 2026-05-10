@@ -8,11 +8,19 @@ export async function PUT(
   try {
     const { id } = params;
     const body = await request.json();
-    const { front, back } = body;
+    const { front, back, phonetic, example, partOfSpeech, synonyms, antonyms, collocations, toeicPart, difficulty } = body;
 
-    const updateData: { front?: string; back?: string } = {};
+    const updateData: Record<string, string> = {};
     if (front !== undefined) updateData.front = front;
     if (back !== undefined) updateData.back = back;
+    if (phonetic !== undefined) updateData.phonetic = phonetic;
+    if (example !== undefined) updateData.example = example;
+    if (partOfSpeech !== undefined) updateData.partOfSpeech = partOfSpeech;
+    if (synonyms !== undefined) updateData.synonyms = synonyms;
+    if (antonyms !== undefined) updateData.antonyms = antonyms;
+    if (collocations !== undefined) updateData.collocations = collocations;
+    if (toeicPart !== undefined) updateData.toeicPart = toeicPart;
+    if (difficulty !== undefined) updateData.difficulty = difficulty;
 
     const card = await prisma.card.update({
       where: { id },

@@ -25,21 +25,35 @@ export async function POST(req: Request) {
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    const prompt = `Bạn là một chuyên gia giáo dục. Hãy tạo một bộ flashcard học tập chất lượng cao về chủ đề: "${topic}".
+    const prompt = `Bạn là một chuyên gia giáo dục và TOEIC. Hãy tạo một bộ flashcard học tập chất lượng cao về chủ đề: "${topic}".
 
 Yêu cầu:
 - Tạo đúng ${cardCount} thẻ flashcard
-- Mỗi thẻ phải có nội dung rõ ràng, chính xác và hữu ích
-- Mặt trước (front): câu hỏi, thuật ngữ, hoặc khái niệm ngắn gọn
-- Mặt sau (back): câu trả lời, định nghĩa, hoặc giải thích chi tiết (1-3 câu)
-- Ngôn ngữ: phù hợp với chủ đề (nếu là ngoại ngữ thì mặt trước là từ/câu ngoại ngữ, mặt sau là nghĩa tiếng Việt và ví dụ)
+- Mỗi thẻ phải có đầy đủ thông tin ngôn ngữ
+- front: từ vựng hoặc cụm từ tiếng Anh
+- back: nghĩa tiếng Việt (ngắn gọn, dễ hiểu)
+- phonetic: phiên âm IPA (ví dụ: /nɪˈɡoʊ.ʃi.eɪt/)
+- example: một câu ví dụ tiếng Anh sử dụng từ này trong ngữ cảnh TOEIC/business
+- partOfSpeech: loại từ (noun, verb, adjective, adverb, phrase)
+- synonyms: 2-3 từ đồng nghĩa tiếng Anh (cách nhau bằng dấu phẩy)
+- collocations: 2-3 cụm từ hay đi kèm (ví dụ: "make a decision, reach a decision")
+- toeicPart: Part TOEIC liên quan (ví dụ: "Part 5", "Part 5, Part 7")
 
 Trả về CHÍNH XÁC định dạng JSON sau (không có markdown, không có text thừa):
 {
   "title": "Tên bộ thẻ phù hợp với chủ đề",
   "description": "Mô tả ngắn gọn (1 câu) về bộ thẻ này",
   "cards": [
-    { "front": "Nội dung mặt trước", "back": "Nội dung mặt sau" }
+    {
+      "front": "negotiate",
+      "back": "thương lượng, đàm phán",
+      "phonetic": "/nɪˈɡoʊ.ʃi.eɪt/",
+      "example": "We need to negotiate the terms of the contract.",
+      "partOfSpeech": "verb",
+      "synonyms": "bargain, discuss, mediate",
+      "collocations": "negotiate a deal, negotiate terms, negotiate a contract",
+      "toeicPart": "Part 5, Part 7"
+    }
   ]
 }`;
 
@@ -48,18 +62,32 @@ Trả về CHÍNH XÁC định dạng JSON sau (không có markdown, không có 
 
     // Parse JSON from AI response - clean up possible markdown wrapping
     let jsonText = text.trim();
-    if (jsonText.startsWith("```json")) {
+    const codeBlockStart = String.fromCharCode(96, 96, 96);
+    if (jsonText.startsWith(codeBlockStart + "json")) {
       jsonText = jsonText.slice(7);
     }
-    if (jsonText.startsWith("```")) {
+    if (jsonText.startsWith(codeBlockStart)) {
       jsonText = jsonText.slice(3);
     }
-    if (jsonText.endsWith("```")) {
+    if (jsonText.endsWith(codeBlockStart)) {
       jsonText = jsonText.slice(0, -3);
     }
     jsonText = jsonText.trim();
 
-    let aiData: { title: string; description: string; cards: { front: string; back: string }[] };
+    let aiData: {
+      title: string;
+      description: string;
+      cards: {
+        front: string;
+        back: string;
+        phonetic?: string;
+        example?: string;
+        partOfSpeech?: string;
+        synonyms?: string;
+        collocations?: string;
+        toeicPart?: string;
+      }[];
+    };
     try {
       aiData = JSON.parse(jsonText);
     } catch {
@@ -86,6 +114,12 @@ Trả về CHÍNH XÁC định dạng JSON sau (không có markdown, không có 
           deckId: newDeck.id,
           front: card.front,
           back: card.back,
+          phonetic: card.phonetic || "",
+          example: card.example || "",
+          partOfSpeech: card.partOfSpeech || "",
+          synonyms: card.synonyms || "",
+          collocations: card.collocations || "",
+          toeicPart: card.toeicPart || "",
         })),
       });
 

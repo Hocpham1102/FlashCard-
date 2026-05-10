@@ -57,8 +57,19 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-64px)] flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-64px)] flex flex-col items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-100">
+        {/* Header với nút trở về */}
+        <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-indigo-600 transition-colors group"
+            title="Quay lại Trang chủ"
+          >
+            <svg className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            Trang chủ
+          </Link>
+        </div>
         <div>
           <h2 className="mt-2 text-center text-3xl font-extrabold text-gray-900 tracking-tight">
             Tạo tài khoản

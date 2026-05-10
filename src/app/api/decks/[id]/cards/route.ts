@@ -28,7 +28,7 @@ export async function POST(
   try {
     const { id } = params;
     const body = await request.json();
-    const { front, back } = body;
+    const { front, back, phonetic, example, partOfSpeech, synonyms, antonyms, collocations, toeicPart, difficulty } = body;
 
     if (!front || typeof front !== "string") {
       return NextResponse.json({ error: "Front is required" }, { status: 400 });
@@ -39,7 +39,19 @@ export async function POST(
 
     const [card] = await prisma.$transaction([
       prisma.card.create({
-        data: { deckId: id, front, back },
+        data: {
+          deckId: id,
+          front,
+          back,
+          phonetic: phonetic || "",
+          example: example || "",
+          partOfSpeech: partOfSpeech || "",
+          synonyms: synonyms || "",
+          antonyms: antonyms || "",
+          collocations: collocations || "",
+          toeicPart: toeicPart || "",
+          difficulty: difficulty || "medium",
+        },
       }),
       prisma.deck.update({
         where: { id },

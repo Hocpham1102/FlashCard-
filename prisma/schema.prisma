@@ -18,29 +18,138 @@ model Deck {
   title       String
   description String   @default("")
   cardCount   Int      @default(0)
+  category    String   @default("")
+  toeicParts  String   @default("")
+  isPublic    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   userId      String?
   user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   cards       Card[]
+  quizSessions QuizSession[]
 
   @@index([userId])
 }
 
 model Card {
-  id          String   @id @default(cuid())
-  deckId      String
-  front       String
-  back        String
-  easeFactor  Float    @default(2.5)
-  interval    Int      @default(0)
-  repetitions Int      @default(0)
-  nextReview  DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deck        Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  deckId       String
+  front        String
+  back         String
+  phonetic     String   @default("")
+  example      String   @default("")
+  partOfSpeech String   @default("")
+  synonyms     String   @default("")
+  antonyms     String   @default("")
+  collocations String   @default("")
+  toeicPart    String   @default("")
+  difficulty   String   @default("medium")
+  audioUrl     String   @default("")
+  easeFactor   Float    @default(2.5)
+  interval     Int      @default(0)
+  repetitions  Int      @default(0)
+  nextReview   DateTime @default(now())
+  lastReviewed DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deck         Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  reviews      CardReview[]
 
   @@index([deckId])
+  @@index([nextReview])
+}
+
+model CardReview {
+  id        String   @id @default(cuid())
+  cardId    String
+  userId    String
+  quality   Int
+  createdAt DateTime @default(now())
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model QuizSession {
+  id           String   @id @default(cuid())
+  userId       String
+  deckId       String
+  quizType     String
+  totalCards   Int
+  correctCount Int      @default(0)
+  wrongCount   Int      @default(0)
+  score        Float    @default(0)
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deck         Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  answers      QuizAnswer[]
+
+  @@index([userId])
+  @@index([deckId])
+}
+
+model QuizAnswer {
+  id            String   @id @default(cuid())
+  quizSessionId String
+  cardId        String
+  userAnswer    String
+  correctAnswer String
+  isCorrect     Boolean
+  timeSpentMs   Int      @default(0)
+  createdAt     DateTime @default(now())
+  quizSession   QuizSession @relation(fields: [quizSessionId], references: [id], onDelete: Cascade)
+
+  @@index([quizSessionId])
+}
+
+model UserStats {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  totalXP           Int      @default(0)
+  level             Int      @default(1)
+  currentStreak     Int      @default(0)
+  longestStreak     Int      @default(0)
+  lastStudyDate     DateTime?
+  totalCardsStudied Int      @default(0)
+  totalQuizzesTaken Int      @default(0)
+  totalCorrect      Int      @default(0)
+  totalWrong        Int      @default(0)
+  dailyGoal         Int      @default(20)
+  todayCards        Int      @default(0)
+  todayDate         String   @default("")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Achievement {
+  id         String   @id @default(cuid())
+  userId     String
+  badgeId    String
+  unlockedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+}
+
+model DailyActivity {
+  id           String   @id @default(cuid())
+  userId       String
+  date         String
+  cardsStudied Int      @default(0)
+  quizzesTaken Int      @default(0)
+  xpEarned     Int      @default(0)
+  timeSpentMin Int      @default(0)
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
 }
 
 model Account {
@@ -71,17 +180,22 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  username      String?   @unique
-  email         String?   @unique
-  emailVerified DateTime?
-  password      String?
-  image         String?
-  role          UserRole  @default(USER)
-  accounts      Account[]
-  sessions      Session[]
-  decks         Deck[]
+  id             String          @id @default(cuid())
+  name           String?
+  username       String?         @unique
+  email          String?         @unique
+  emailVerified  DateTime?
+  password       String?
+  image          String?
+  role           UserRole        @default(USER)
+  accounts       Account[]
+  sessions       Session[]
+  decks          Deck[]
+  cardReviews    CardReview[]
+  quizSessions   QuizSession[]
+  stats          UserStats?
+  achievements   Achievement[]
+  dailyActivities DailyActivity[]
 }
 
 model VerificationToken {

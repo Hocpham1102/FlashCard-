@@ -36,12 +36,7 @@ export function NavMenu() {
     );
   }
 
-  const items: NavItem[] = session
-    ? [
-        { label: "Dashboard", href: "/dashboard" },
-        { label: "Hồ sơ", href: "/profile" },
-      ]
-    : [{ label: "Trang chủ", href: "/" }];
+  const items: NavItem[] = [];
 
   if (session?.user?.role === "ADMIN" || session?.user?.isAdmin) {
     items.push({ label: "Admin", href: "/admin" });

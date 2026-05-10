@@ -1,9 +1,10 @@
 "use client";
 
+import { DashboardStats } from "@/components/DashboardStats";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Deck {
   _id: string;
@@ -34,6 +35,16 @@ export default function DashboardPage() {
   const [isAIGenerating, setIsAIGenerating] = useState(false);
   const [aiError, setAIError] = useState<string | null>(null);
   const [aiSuccess, setAISuccess] = useState<string | null>(null);
+
+  // File import states
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importTitle, setImportTitle] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -132,6 +143,63 @@ export default function DashboardPage() {
     }
   }
 
+  // ─── File Import ───────────────────────────────────────────────
+  // File cấu trúc (parser trực tiếp, không cần AI)
+  const STRUCTURED_EXTS = new Set(["csv", "json", "txt"]);
+
+  const getFileExt = (f: File) => f.name.split(".").pop()?.toLowerCase() ?? "";
+  const isStructured = (f: File) => STRUCTURED_EXTS.has(getFileExt(f));
+
+  const handleFileSelect = useCallback((file: File) => {
+    setImportFile(file);
+    setImportError(null);
+    // Tự động điền tên từ tên file
+    if (!importTitle) {
+      setImportTitle(file.name.replace(/\.[^.]+$/, "").replace(/[_-]/g, " "));
+    }
+  }, [importTitle]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  }, [handleFileSelect]);
+
+  const handleImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importFile) return;
+    setIsImporting(true);
+    setImportError(null);
+    setImportSuccess(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", importFile);
+      if (importTitle.trim()) fd.append("title", importTitle.trim());
+
+      // Route đúng endpoint: file cấu trúc dùng parser, còn lại dùng AI
+      const endpoint = isStructured(importFile)
+        ? "/api/decks/import"
+        : "/api/decks/import-ai";
+
+      const res = await fetch(endpoint, { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Nhập file thất bại");
+      setImportSuccess(`✅ Đã tạo bộ thẻ "${data.deck.title}" với ${data.deck.cardCount} thẻ!`);
+      await fetchDecks();
+      setTimeout(() => {
+        setIsImportModalOpen(false);
+        setImportFile(null);
+        setImportTitle("");
+        setImportSuccess(null);
+      }, 2500);
+    } catch (err: any) {
+      setImportError(err.message);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   if (status === "loading") {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -182,6 +250,8 @@ export default function DashboardPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <DashboardStats />
+        
         <div className="flex items-center justify-between mb-8">
           <h2 className="text-2xl font-bold text-slate-800">Bộ thẻ của bạn</h2>
           <div className="flex items-center gap-3">
@@ -211,6 +281,22 @@ export default function DashboardPage() {
                 </svg>
                 Tạo bằng AI
               </span>
+            </button>
+            {/* Import File Button */}
+            <button
+              onClick={() => {
+                setIsImportModalOpen(true);
+                setImportFile(null);
+                setImportTitle("");
+                setImportError(null);
+                setImportSuccess(null);
+              }}
+              className="flex items-center gap-2 bg-white border border-slate-200 hover:border-emerald-400 hover:text-emerald-600 text-slate-600 font-semibold py-2.5 px-5 rounded-xl shadow-sm hover:shadow-md transition-all transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Nhập file
             </button>
 
             {/* Manual Create Button */}
@@ -349,10 +435,10 @@ export default function DashboardPage() {
                   {deck.description || "Không có mô tả"}
                 </p>
 
-                <div className="flex gap-3 pt-4 border-t border-slate-100 mt-auto">
+                <div className="flex gap-2 pt-4 border-t border-slate-100 mt-auto">
                   <Link
                     href={`/decks/${deck._id}/study`}
-                    className="flex-1 flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white text-sm font-bold py-2.5 rounded-xl transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white text-sm font-bold py-2.5 rounded-xl transition-colors"
                   >
                     <svg
                       className="w-4 h-4"
@@ -374,15 +460,23 @@ export default function DashboardPage() {
                         d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                       />
                     </svg>
-                    Học ngay
+                    Học
+                  </Link>
+                  <Link
+                    href={`/decks/${deck._id}/quiz`}
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white text-sm font-bold py-2.5 rounded-xl transition-colors"
+                    title="Quiz"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                    Quiz
                   </Link>
                   <Link
                     href={`/decks/${deck._id}`}
-                    className="flex items-center justify-center bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-sm font-bold py-2.5 px-4 rounded-xl transition-colors"
+                    className="flex-none flex items-center justify-center bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-sm font-bold w-10 h-10 rounded-xl transition-colors"
                     title="Quản lý"
                   >
                     <svg
-                      className="w-5 h-5"
+                      className="w-4 h-4"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -700,6 +794,225 @@ export default function DashboardPage() {
                     </div>
                   </form>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+        {/* ─── File Import Modal ─── */}
+        {isImportModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+              {/* Header */}
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">Nhập bộ thẻ từ file</h2>
+                    <p className="text-xs text-slate-400">Bất kỳ file nào · PDF · Ảnh · CSV · JSON · TXT · HTML...</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="px-6 py-5">
+                {/* Success */}
+                {importSuccess && (
+                  <div className="mb-4 flex items-center gap-3 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-emerald-700 font-medium text-sm">
+                    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {importSuccess}
+                  </div>
+                )}
+
+                {/* Error */}
+                {importError && (
+                  <div className="mb-4 flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-red-600 text-sm">
+                    <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {importError}
+                  </div>
+                )}
+
+                <form onSubmit={handleImport} className="space-y-4">
+                  {/* Drag & Drop Zone */}
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 cursor-pointer transition-all duration-200 ${
+                      isDragging
+                        ? "border-emerald-400 bg-emerald-50 scale-[1.01]"
+                        : importFile
+                        ? "border-emerald-400 bg-emerald-50/60"
+                        : "border-slate-300 bg-slate-50 hover:border-emerald-400 hover:bg-emerald-50/40"
+                    }`}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="*"
+                      className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }}
+                    />
+
+                    {importFile ? (
+                      <>
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center">
+                          <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div className="text-center">
+                          <p className="font-bold text-slate-800 text-sm">{importFile.name}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {(importFile.size / 1024).toFixed(1)} KB · {importFile.name.split(".").pop()?.toUpperCase()}
+                          </p>
+                          {/* Badge AI vs Cấu trúc */}
+                          {isStructured(importFile) ? (
+                            <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">
+                              ⚡ Cấu trúc — nhanh
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">
+                              ✨ AI sẽ phân tích — 10–30 giây
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setImportFile(null); setImportTitle(""); }}
+                          className="text-xs text-slate-400 hover:text-red-500 transition-colors"
+                        >
+                          Thảy file khác
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-12 h-12 rounded-2xl bg-slate-200 flex items-center justify-center">
+                          <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                        </div>
+                        <div className="text-center">
+                          <p className="font-semibold text-slate-600 text-sm">Kéo thả file vào đây</p>
+                          <p className="text-xs text-slate-400 mt-1">hoặc <span className="text-emerald-600 font-semibold">chọn file</span></p>
+                          <p className="text-xs text-slate-400 mt-0.5">PDF · Ảnh · TXT · CSV · JSON · HTML · tối đa 20MB</p>
+                          <div className="flex items-center gap-2 mt-2 justify-center">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">⚡ CSV/JSON/TXT: nhanh</span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">✨ PDF/Ảnh: AI phân tích</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Deck Title */}
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                      Tên bộ thẻ
+                    </label>
+                    <input
+                      type="text"
+                      value={importTitle}
+                      onChange={(e) => setImportTitle(e.target.value)}
+                      placeholder="Tự động lấy từ tên file nếu để trống"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:bg-white transition-colors text-slate-900 text-sm"
+                    />
+                  </div>
+
+                  {/* Format Guide */}
+                  <details className="group rounded-xl border border-slate-200 overflow-hidden">
+                    <summary className="flex items-center justify-between px-4 py-3 cursor-pointer select-none text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                      <span className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Hướng dẫn định dạng file
+                      </span>
+                      <svg className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </summary>
+                    <div className="px-4 pb-4 pt-2 space-y-3 bg-slate-50/50 border-t border-slate-100">
+                      <div>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">CSV</p>
+                        <code className="block text-xs bg-slate-900 text-emerald-400 rounded-lg px-3 py-2 font-mono whitespace-pre">{`front,back,phonetic,example
+negotiate,đàm phán,/nɪˈɡoʊ.ʃi.eɪt/,We need to negotiate.
+deliver,giao hàng,,The package was delivered.`}</code>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">TXT (mỗi dòng)</p>
+                        <code className="block text-xs bg-slate-900 text-emerald-400 rounded-lg px-3 py-2 font-mono whitespace-pre">{`negotiate\tđàm phán\t/nɪˈɡoʊ.ʃi.eɪt/
+deliver\tgiao hàng
+# hoặc dùng :: 
+negotiate::đàm phán`}</code>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">JSON</p>
+                        <code className="block text-xs bg-slate-900 text-emerald-400 rounded-lg px-3 py-2 font-mono whitespace-pre">{`{"title":"Tên bộ thẻ",
+ "cards":[{"front":"negotiate","back":"đàm phán"}]}`}</code>
+                      </div>
+                    </div>
+                  </details>
+
+                  {/* Actions */}
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsImportModalOpen(false)}
+                      className="px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!importFile || isImporting}
+                      className="flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                    >
+                      {isImporting ? (
+                        <>
+                          <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          {importFile && !isStructured(importFile) ? "AI đang phân tích..." : "Đang nhập..."}
+                        </>
+                      ) : (
+                        <>
+                          {importFile && !isStructured(importFile) ? (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                              </svg>
+                              Phân tích bằng AI
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                              </svg>
+                              Nhập bộ thẻ
+                            </>
+                          )}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>

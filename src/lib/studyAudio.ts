@@ -19,7 +19,7 @@ export function isSpeechSynthesisSupported() {
 }
 
 export function speakText(text: string, options: SpeakOptions = {}) {
-  if (!isSpeechSynthesisSupported()) return;
+  if (!isSpeechSynthesisSupported() || !isSoundEnabled()) return;
 
   const content = text.trim();
   if (!content) return;
@@ -39,8 +39,20 @@ export function stopSpeaking() {
   window.speechSynthesis.cancel();
 }
 
-export function playFeedbackTone(kind: FeedbackKind) {
+export function isSoundEnabled(): boolean {
+  if (!hasWindow()) return true;
+  return localStorage.getItem("flashcard_sound_enabled") !== "false";
+}
+
+export function setSoundEnabled(enabled: boolean) {
   if (!hasWindow()) return;
+  localStorage.setItem("flashcard_sound_enabled", enabled ? "true" : "false");
+  // Dispatch custom event so other components can react
+  window.dispatchEvent(new Event("soundSettingsChanged"));
+}
+
+export function playFeedbackTone(kind: FeedbackKind) {
+  if (!hasWindow() || !isSoundEnabled()) return;
 
   const AudioContextClass =
     window.AudioContext ||

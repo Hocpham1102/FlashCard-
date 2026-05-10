@@ -29,6 +29,12 @@ export default function AdminLoginPage() {
     setLoading(true);
     setError("");
 
+    // Nếu đang có session của user thường, logout trước khi đăng nhập admin
+    // Điều này ngăn việc session bị ghi đè nếu user thường truy cập trang admin
+    if (status === "authenticated" && session?.user?.role !== "ADMIN" && !session?.user?.isAdmin) {
+      await signOut({ redirect: false });
+    }
+
     const result = await signIn("credentials", {
       username,
       password,
@@ -102,6 +108,20 @@ export default function AdminLoginPage() {
 
         {/* Login Card */}
         <div className="rounded-2xl border border-slate-800/80 bg-slate-900/70 backdrop-blur-xl p-8 shadow-2xl">
+          {/* Cảnh báo khi user thường truy cập trang admin */}
+          {status === "authenticated" && session?.user?.role !== "ADMIN" && !session?.user?.isAdmin && (
+            <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <p className="text-xs font-bold text-amber-300">Đang đăng nhập với tài khoản thường</p>
+                <p className="text-xs text-amber-400/80 mt-0.5">
+                  Đăng nhập admin sẽ thay thế session hiện tại của <strong>{session.user?.name || session.user?.username}</strong>.
+                </p>
+              </div>
+            </div>
+          )}
           <form className="space-y-5" onSubmit={handleCredentialsLogin}>
             {/* Username Field */}
             <div>

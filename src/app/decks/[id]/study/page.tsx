@@ -14,6 +14,13 @@ interface Card {
   _id: string;
   front: string;
   back: string;
+  phonetic: string;
+  example: string;
+  partOfSpeech: string;
+  synonyms: string;
+  antonyms: string;
+  collocations: string;
+  toeicPart: string;
   easeFactor: number;
   interval: number;
   repetitions: number;
@@ -26,28 +33,64 @@ interface Deck {
   description?: string;
 }
 
-interface SessionStats {
-  correct: number;
-  wrong: number;
+interface ReviewResult {
+  nextReviewFormatted: string;
+  interval: number;
 }
 
-type StudyState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "empty"; deck: Deck }
-  | {
-      status: "studying";
-      deck: Deck;
-      cards: Card[];
-      currentIndex: number;
-      stats: SessionStats;
-    }
-  | {
-      status: "complete";
-      deck: Deck;
-      totalCards: number;
-      stats: SessionStats;
-    };
+type RatingOption = {
+  label: string;
+  quality: number;
+  color: string;
+  bgColor: string;
+  hoverBg: string;
+  borderColor: string;
+  icon: string;
+  description: string;
+};
+
+const RATING_OPTIONS: RatingOption[] = [
+  {
+    label: "Again",
+    quality: 0,
+    color: "text-red-700",
+    bgColor: "bg-red-50",
+    hoverBg: "hover:bg-red-100",
+    borderColor: "border-red-200",
+    icon: "🔄",
+    description: "Quên hoàn toàn",
+  },
+  {
+    label: "Hard",
+    quality: 2,
+    color: "text-orange-700",
+    bgColor: "bg-orange-50",
+    hoverBg: "hover:bg-orange-100",
+    borderColor: "border-orange-200",
+    icon: "😓",
+    description: "Rất khó nhớ",
+  },
+  {
+    label: "Good",
+    quality: 4,
+    color: "text-emerald-700",
+    bgColor: "bg-emerald-50",
+    hoverBg: "hover:bg-emerald-100",
+    borderColor: "border-emerald-200",
+    icon: "👍",
+    description: "Nhớ được",
+  },
+  {
+    label: "Easy",
+    quality: 5,
+    color: "text-blue-700",
+    bgColor: "bg-blue-50",
+    hoverBg: "hover:bg-blue-100",
+    borderColor: "border-blue-200",
+    icon: "⚡",
+    description: "Quá dễ",
+  },
+];
 
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
@@ -58,109 +101,54 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
-function normalizeAnswerText(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ");
-}
-
-function isAnswerCorrect(userInput: string, expectedAnswer: string) {
-  const normalizedUser = normalizeAnswerText(userInput);
-  const normalizedExpected = normalizeAnswerText(expectedAnswer);
-
-  if (!normalizedUser || !normalizedExpected) {
-    return false;
-  }
-
-  if (normalizedUser === normalizedExpected) {
-    return true;
-  }
-
-  const variants = normalizedExpected
-    .split(/[,;\/|\n]/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (!variants.includes(normalizedExpected)) {
-    variants.push(normalizedExpected);
-  }
-
-  const userTokens = normalizedUser
-    .split(" ")
-    .filter((token) => token.length >= 2);
-
-  return variants.some((variant) => {
-    if (variant === normalizedUser) {
-      return true;
-    }
-
-    // Allow partial match when user entered a meaningful fragment.
-    if (normalizedUser.length >= 3 && variant.includes(normalizedUser)) {
-      return true;
-    }
-
-    // Allow cases like "go school" for expected "go to school".
-    if (
-      userTokens.length > 0 &&
-      userTokens.every((token) => variant.includes(token))
-    ) {
-      return true;
-    }
-
-    return false;
-  });
-}
-
 export default function StudyPage() {
   const params = useParams();
   const deckId = params.id as string;
 
-  const [studyState, setStudyState] = useState<StudyState>({
-    status: "loading",
-  });
+  const [deck, setDeck] = useState<Deck | null>(null);
+  const [cards, setCards] = useState<Card[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [userAnswer, setUserAnswer] = useState("");
-  const [hasAnswered, setHasAnswered] = useState(false);
-  const [isCorrect, setIsCorrect] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isEmpty, setIsEmpty] = useState(false);
+  const [isComplete, setIsComplete] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+
+  // Stats
+  const [stats, setStats] = useState({ again: 0, hard: 0, good: 0, easy: 0 });
 
   const loadStudySession = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
     try {
       const [deckRes, cardsRes] = await Promise.all([
         fetch(`/api/decks/${deckId}`),
         fetch(`/api/decks/${deckId}/cards`),
       ]);
 
-      if (!deckRes.ok) {
-        throw new Error("Failed to load deck");
-      }
-      if (!cardsRes.ok) {
-        throw new Error("Failed to load cards");
-      }
+      if (!deckRes.ok) throw new Error("Failed to load deck");
+      if (!cardsRes.ok) throw new Error("Failed to load cards");
 
-      const deck: Deck = await deckRes.json();
-      const cards: Card[] = await cardsRes.json();
+      const deckData: Deck = await deckRes.json();
+      const cardsData: Card[] = await cardsRes.json();
 
-      if (cards.length === 0) {
-        setStudyState({ status: "empty", deck });
+      setDeck(deckData);
+      if (cardsData.length === 0) {
+        setIsEmpty(true);
       } else {
-        setStudyState({
-          status: "studying",
-          deck,
-          cards: shuffleArray(cards),
-          currentIndex: 0,
-          stats: { correct: 0, wrong: 0 },
-        });
+        setCards(shuffleArray(cardsData));
+        setCurrentIndex(0);
+        setIsComplete(false);
+        setIsEmpty(false);
+        setStats({ again: 0, hard: 0, good: 0, easy: 0 });
       }
     } catch (err) {
-      setStudyState({
-        status: "error",
-        message: err instanceof Error ? err.message : "Something went wrong",
-      });
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsLoading(false);
     }
   }, [deckId]);
 
@@ -170,186 +158,187 @@ export default function StudyPage() {
 
   useEffect(() => {
     setSpeechSupported(isSpeechSynthesisSupported());
-
-    return () => {
-      stopSpeaking();
-    };
+    return () => { stopSpeaking(); };
   }, []);
 
-  async function submitReview(cardId: string, quality: number) {
-    try {
-      await fetch(`/api/cards/${cardId}/review`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quality }),
-      });
-    } catch {
-      // Silently fail — SM-2 update is background behavior
+  // Keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (isComplete || isLoading || isEmpty || cards.length === 0) return;
+
+      if (e.code === "Space" && !isSubmittingReview) {
+        e.preventDefault();
+        setIsFlipped((prev) => !prev);
+        return;
+      }
+
+      if (isFlipped && !isSubmittingReview) {
+        if (e.key === "1") handleRating(RATING_OPTIONS[0]);
+        if (e.key === "2") handleRating(RATING_OPTIONS[1]);
+        if (e.key === "3") handleRating(RATING_OPTIONS[2]);
+        if (e.key === "4") handleRating(RATING_OPTIONS[3]);
+      }
     }
-  }
 
-  function handleSubmitAnswer() {
-    if (studyState.status !== "studying") return;
-
-    const { cards, currentIndex } = studyState;
-    const currentCard = cards[currentIndex];
-
-    const correct = isAnswerCorrect(userAnswer, currentCard.back);
-
-    setIsCorrect(correct);
-    setHasAnswered(true);
-    setIsFlipped(true);
-
-    // Update stats
-    const newStats = {
-      correct: studyState.stats.correct + (correct ? 1 : 0),
-      wrong: studyState.stats.wrong + (correct ? 0 : 1),
-    };
-
-    setStudyState({
-      ...studyState,
-      stats: newStats,
-    });
-
-    playFeedbackTone(correct ? "correct" : "wrong");
-
-    // Submit review in background
-    const quality = correct ? 4 : 0;
-    submitReview(currentCard._id, quality);
-  }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFlipped, isComplete, isLoading, isEmpty, cards.length, currentIndex, isSubmittingReview]);
 
   function handleSpeakFront() {
-    if (studyState.status !== "studying") return;
-
-    const card = studyState.cards[studyState.currentIndex];
-    speakText(card.front, { lang: "en-US", rate: 0.95, pitch: 1 });
+    if (cards.length === 0) return;
+    const card = cards[currentIndex];
+    speakText(card.front, { lang: "en-US", rate: 0.9, pitch: 1 });
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && !hasAnswered && userAnswer.trim().length > 0) {
-      handleSubmitAnswer();
-    }
-  }
+  async function handleRating(option: RatingOption) {
+    if (isSubmittingReview) return;
+    const card = cards[currentIndex];
 
-  function handleNext() {
-    if (studyState.status !== "studying") return;
+    setIsSubmittingReview(true);
 
-    stopSpeaking();
+    // Update stats
+    const statKey = option.label.toLowerCase() as keyof typeof stats;
+    setStats((prev) => ({ ...prev, [statKey]: prev[statKey] + 1 }));
 
-    const { cards, currentIndex, stats } = studyState;
-    const nextIndex = currentIndex + 1;
-
-    if (nextIndex >= cards.length) {
-      setStudyState({
-        status: "complete",
-        deck: studyState.deck,
-        totalCards: cards.length,
-        stats,
-      });
+    // Play feedback
+    if (option.quality >= 3) {
+      playFeedbackTone("correct");
     } else {
-      setStudyState({
-        ...studyState,
-        currentIndex: nextIndex,
-      });
+      playFeedbackTone("wrong");
     }
 
-    // Reset per-card state
-    setIsFlipped(false);
-    setUserAnswer("");
-    setHasAnswered(false);
-    setIsCorrect(false);
+    // Submit review to API
+    try {
+      const res = await fetch(`/api/cards/${card._id}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quality: option.quality }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setReviewResult({
+          nextReviewFormatted: data.nextReviewFormatted,
+          interval: data.interval,
+        });
+
+        // Update gamification display if returned
+        if (data.gamification) {
+          window.dispatchEvent(
+            new CustomEvent("gamificationUpdate", { detail: data.gamification })
+          );
+        }
+      }
+    } catch {
+      // Non-critical
+    }
+
+    // Auto-advance after a brief delay to show the review result
+    setTimeout(() => {
+      stopSpeaking();
+      const nextIndex = currentIndex + 1;
+      if (nextIndex >= cards.length) {
+        setIsComplete(true);
+      } else {
+        setCurrentIndex(nextIndex);
+      }
+      setIsFlipped(false);
+      setReviewResult(null);
+      setIsSubmittingReview(false);
+    }, 800);
   }
 
   function handleStudyAgain() {
-    if (studyState.status !== "complete") return;
-
-    // We need to reload cards and shuffle again
     setIsFlipped(false);
-    setUserAnswer("");
-    setHasAnswered(false);
-    setIsCorrect(false);
-    setStudyState({ status: "loading" });
+    setReviewResult(null);
+    setIsSubmittingReview(false);
+    setIsLoading(true);
     loadStudySession();
   }
 
-  if (studyState.status === "loading") {
+  // --- RENDER ---
+
+  if (isLoading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="flex items-center justify-center py-20">
-          <div className="text-gray-500 text-lg">Loading study session...</div>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-500 font-medium">Đang tải phiên học...</p>
         </div>
       </div>
     );
   }
 
-  if (studyState.status === "error") {
+  if (error) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          <p className="font-medium">Error</p>
-          <p className="text-sm">{studyState.message}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (studyState.status === "empty") {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="max-w-lg mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <div className="text-5xl mb-4">&#128218;</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            No cards yet
-          </h2>
-          <p className="text-gray-500 mb-8">
-            This deck doesn&apos;t have any cards to study. Add some cards
-            first!
-          </p>
-          <Link
-            href={`/decks/${studyState.deck._id}`}
-            className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-6 rounded-lg shadow transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-red-200 p-8 max-w-md w-full text-center">
+          <div className="text-4xl mb-4">😕</div>
+          <h2 className="text-xl font-bold text-slate-900 mb-2">Đã xảy ra lỗi</h2>
+          <p className="text-slate-500 mb-6">{error}</p>
+          <button
+            onClick={loadStudySession}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-6 rounded-xl transition-colors"
           >
-            Back to Deck
+            Thử lại
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isEmpty && deck) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-12 max-w-md w-full text-center">
+          <div className="text-5xl mb-4">📚</div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Chưa có thẻ nào</h2>
+          <p className="text-slate-500 mb-8">Hãy thêm thẻ vào bộ này trước khi học!</p>
+          <Link
+            href={`/decks/${deck._id}`}
+            className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-6 rounded-xl transition-colors"
+          >
+            Quay lại bộ thẻ
           </Link>
         </div>
       </div>
     );
   }
 
-  if (studyState.status === "complete") {
-    const { stats, totalCards, deck } = studyState;
-    const percentage =
-      totalCards > 0 ? Math.round((stats.correct / totalCards) * 100) : 0;
+  if (isComplete && deck) {
+    const totalCards = cards.length;
+    const goodRate = totalCards > 0 ? Math.round(((stats.good + stats.easy) / totalCards) * 100) : 0;
 
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="max-w-lg mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <div className="text-5xl mb-4">&#127942;</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Session Complete!
-          </h2>
-          <p className="text-gray-500 mb-6">
-            You reviewed {totalCards} card{totalCards !== 1 ? "s" : ""}
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8 sm:p-12 max-w-lg w-full text-center">
+          <div className="text-5xl mb-4">🏆</div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Hoàn thành phiên học!</h2>
+          <p className="text-slate-500 mb-6">
+            Bạn đã ôn tập {totalCards} thẻ trong bộ <span className="font-semibold text-slate-700">{deck.title}</span>
           </p>
 
-          {/* Score summary */}
-          <div className="bg-gray-50 rounded-xl p-6 mb-8">
-            <div className="text-4xl font-bold text-indigo-600 mb-2">
-              {percentage}%
-            </div>
-            <div className="text-sm text-gray-500 mb-4">Score</div>
-            <div className="flex justify-center gap-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-emerald-600">
-                  {stats.correct}
-                </div>
-                <div className="text-xs text-gray-500">Correct</div>
+          {/* Score circle */}
+          <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-6 mb-6">
+            <div className="text-5xl font-extrabold text-indigo-600 mb-1">{goodRate}%</div>
+            <div className="text-sm text-slate-500 mb-4">Tỷ lệ nhớ tốt</div>
+
+            {/* Rating breakdown */}
+            <div className="grid grid-cols-4 gap-2">
+              <div className="bg-white rounded-xl p-3 border border-red-100">
+                <div className="text-lg font-bold text-red-600">{stats.again}</div>
+                <div className="text-xs text-slate-500">Again</div>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-rose-600">
-                  {stats.wrong}
-                </div>
-                <div className="text-xs text-gray-500">Incorrect</div>
+              <div className="bg-white rounded-xl p-3 border border-orange-100">
+                <div className="text-lg font-bold text-orange-600">{stats.hard}</div>
+                <div className="text-xs text-slate-500">Hard</div>
+              </div>
+              <div className="bg-white rounded-xl p-3 border border-emerald-100">
+                <div className="text-lg font-bold text-emerald-600">{stats.good}</div>
+                <div className="text-xs text-slate-500">Good</div>
+              </div>
+              <div className="bg-white rounded-xl p-3 border border-blue-100">
+                <div className="text-lg font-bold text-blue-600">{stats.easy}</div>
+                <div className="text-xs text-slate-500">Easy</div>
               </div>
             </div>
           </div>
@@ -357,15 +346,21 @@ export default function StudyPage() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button
               onClick={handleStudyAgain}
-              className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-6 rounded-lg shadow transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-6 rounded-xl shadow transition-colors"
             >
-              Study Again
+              Học lại
             </button>
             <Link
               href={`/decks/${deck._id}`}
-              className="inline-block bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-semibold py-2.5 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold py-2.5 px-6 rounded-xl transition-colors"
             >
-              Back to Deck
+              Quay lại bộ thẻ
+            </Link>
+            <Link
+              href="/dashboard"
+              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold py-2.5 px-6 rounded-xl transition-colors"
+            >
+              Dashboard
             </Link>
           </div>
         </div>
@@ -373,157 +368,204 @@ export default function StudyPage() {
     );
   }
 
-  const { deck, cards, currentIndex } = studyState;
+  // --- STUDYING STATE ---
+  if (!deck || cards.length === 0) return null;
+
   const currentCard = cards[currentIndex];
   const totalCards = cards.length;
-  const completedCards = currentIndex;
-  const progressPercent =
-    totalCards > 0 ? (completedCards / totalCards) * 100 : 0;
-
-  // Determine card border color based on answer state
-  const cardBorderClass = hasAnswered
-    ? isCorrect
-      ? "border-emerald-400 ring-2 ring-emerald-200"
-      : "border-rose-400 ring-2 ring-rose-200"
-    : "border-gray-100";
+  const progressPercent = totalCards > 0 ? ((currentIndex) / totalCards) * 100 : 0;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-slate-50 pb-8">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-xl font-bold text-gray-900">{deck.title}</h1>
-          <span className="text-sm text-gray-500">
-            Card {currentIndex + 1} of {totalCards}
-          </span>
-        </div>
-        {/* Progress bar */}
-        <div className="w-full bg-gray-200 rounded-full h-2.5">
-          <div
-            className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-        <div className="text-xs text-gray-400 mt-1 text-right">
-          {completedCards} / {totalCards} completed
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-20">
+        <div className="max-w-3xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <Link
+                href={`/decks/${deck._id}`}
+                className="w-8 h-8 flex flex-shrink-0 items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                title="Thoát phiên học"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </Link>
+              <span className="text-sm font-bold text-slate-700 truncate max-w-[200px] sm:max-w-[400px]">
+                {deck.title}
+              </span>
+            </div>
+            <span className="text-sm font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
+              {currentIndex + 1} / {totalCards}
+            </span>
+          </div>
+          {/* Progress bar */}
+          <div className="w-full bg-slate-100 rounded-full h-2">
+            <div
+              className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Card */}
-      <div className="flex flex-col items-center justify-center py-4">
+      {/* Card Area */}
+      <div className="max-w-3xl mx-auto px-4 pt-8">
+        {/* Keyboard shortcuts hint */}
+        <div className="text-center mb-4">
+          <span className="text-xs text-slate-400">
+            Phím tắt: <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 font-mono text-[10px]">Space</kbd> lật thẻ
+            {isFlipped && " · "}
+            {isFlipped && <><kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 font-mono text-[10px]">1</kbd>-<kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 font-mono text-[10px]">4</kbd> đánh giá</>}
+          </span>
+        </div>
+
+        {/* Flashcard */}
         <div
-          className="perspective w-full max-w-lg mx-auto"
-          style={{ minHeight: "300px" }}
+          className="perspective w-full mx-auto cursor-pointer"
+          style={{ minHeight: "320px" }}
+          onClick={() => !isSubmittingReview && setIsFlipped((prev) => !prev)}
         >
           <div
-            className={`relative w-full h-full transition-transform duration-[600ms] ${
-              hasAnswered ? "cursor-pointer" : "cursor-default"
-            } ${isFlipped ? "rotate-y-180" : ""}`}
-            onClick={() => hasAnswered && setIsFlipped((prev) => !prev)}
-            style={{
-              transformStyle: "preserve-3d",
-              minHeight: "300px",
-            }}
+            className={`relative w-full transition-transform duration-[600ms] ${isFlipped ? "rotate-y-180" : ""}`}
+            style={{ transformStyle: "preserve-3d", minHeight: "320px" }}
           >
-            {/* Front */}
+            {/* Front Face */}
             <div
-              className={`absolute inset-0 backface-hidden bg-white rounded-2xl shadow-lg flex flex-col items-center justify-center p-8 border ${cardBorderClass}`}
+              className="absolute inset-0 backface-hidden bg-white rounded-2xl shadow-lg border border-slate-200 flex flex-col items-center justify-center p-8"
               style={{ backfaceVisibility: "hidden" }}
             >
-              <p className="text-lg text-gray-700 text-center whitespace-pre-wrap">
+              {/* Part of speech badge */}
+              {currentCard.partOfSpeech && (
+                <span className="absolute top-4 left-4 px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs font-semibold rounded-full">
+                  {currentCard.partOfSpeech}
+                </span>
+              )}
+
+              {/* TOEIC Part badge */}
+              {currentCard.toeicPart && (
+                <span className="absolute top-4 right-4 px-2 py-0.5 bg-purple-50 text-purple-600 text-xs font-semibold rounded-full">
+                  {currentCard.toeicPart}
+                </span>
+              )}
+
+              <p className="text-2xl sm:text-3xl font-bold text-slate-900 text-center mb-2">
                 {currentCard.front}
               </p>
+
+              {/* Phonetic */}
+              {currentCard.phonetic && (
+                <p className="text-slate-400 text-sm mb-3">{currentCard.phonetic}</p>
+              )}
+
+              {/* TTS Button */}
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSpeakFront();
-                }}
+                onClick={(e) => { e.stopPropagation(); handleSpeakFront(); }}
                 disabled={!speechSupported}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+                className="mt-2 inline-flex items-center gap-2 rounded-full bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-4 py-2 text-sm font-medium text-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 type="button"
               >
-                <span aria-hidden="true">&#128266;</span>
-                <span>
-                  {speechSupported
-                    ? "Listen pronunciation"
-                    : "Audio unavailable"}
-                </span>
+                <span className="text-lg">🔊</span>
+                Nghe phát âm
               </button>
-              {!hasAnswered && (
-                <p className="text-sm text-gray-400 mt-6">
-                  Type your answer below
+
+              {!isFlipped && (
+                <p className="text-sm text-slate-400 mt-6 animate-pulse">
+                  Nhấn để lật thẻ
                 </p>
               )}
             </div>
 
-            {/* Back */}
+            {/* Back Face */}
             <div
-              className={`absolute inset-0 backface-hidden rotate-y-180 bg-white rounded-2xl shadow-lg flex flex-col items-center justify-center p-8 border ${cardBorderClass}`}
-              style={{
-                backfaceVisibility: "hidden",
-                transform: "rotateY(180deg)",
-              }}
+              className="absolute inset-0 backface-hidden rotate-y-180 bg-white rounded-2xl shadow-lg border border-slate-200 p-6 sm:p-8 overflow-y-auto"
+              style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
             >
-              <p className="text-lg text-gray-700 text-center whitespace-pre-wrap">
-                {currentCard.back}
-              </p>
-              {hasAnswered && (
-                <div className="mt-6 text-center">
-                  {isCorrect ? (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-emerald-100 text-emerald-700">
-                      Correct
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-rose-100 text-rose-700">
-                      Wrong! The answer is: {currentCard.back}
-                    </span>
+              <div className="space-y-4">
+                {/* Main answer */}
+                <div className="text-center pb-4 border-b border-slate-100">
+                  <p className="text-xl sm:text-2xl font-bold text-slate-900 mb-1">
+                    {currentCard.back}
+                  </p>
+                  {currentCard.phonetic && (
+                    <p className="text-slate-400 text-sm">{currentCard.phonetic}</p>
                   )}
                 </div>
-              )}
+
+                {/* Example */}
+                {currentCard.example && (
+                  <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
+                    <div className="text-xs font-semibold text-amber-600 mb-1 uppercase tracking-wider">Ví dụ</div>
+                    <p className="text-slate-700 text-sm italic">{currentCard.example}</p>
+                  </div>
+                )}
+
+                {/* Collocations */}
+                {currentCard.collocations && (
+                  <div className="bg-sky-50 rounded-xl p-3 border border-sky-100">
+                    <div className="text-xs font-semibold text-sky-600 mb-1 uppercase tracking-wider">Collocations</div>
+                    <p className="text-slate-700 text-sm">{currentCard.collocations}</p>
+                  </div>
+                )}
+
+                {/* Synonyms & Antonyms row */}
+                {(currentCard.synonyms || currentCard.antonyms) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {currentCard.synonyms && (
+                      <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                        <div className="text-xs font-semibold text-emerald-600 mb-1 uppercase tracking-wider">Đồng nghĩa</div>
+                        <p className="text-slate-700 text-sm">{currentCard.synonyms}</p>
+                      </div>
+                    )}
+                    {currentCard.antonyms && (
+                      <div className="bg-rose-50 rounded-xl p-3 border border-rose-100">
+                        <div className="text-xs font-semibold text-rose-600 mb-1 uppercase tracking-wider">Trái nghĩa</div>
+                        <p className="text-slate-700 text-sm">{currentCard.antonyms}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Review result toast */}
+                {reviewResult && (
+                  <div className="text-center py-2 animate-in fade-in">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-50 text-indigo-700 text-sm font-medium rounded-full border border-indigo-100">
+                      📅 Ôn lại sau: {reviewResult.nextReviewFormatted}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Answer Input */}
-        {!hasAnswered && (
-          <div className="mt-6 w-full max-w-lg mx-auto">
-            <input
-              type="text"
-              value={userAnswer}
-              onChange={(e) => setUserAnswer(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your answer..."
-              className="w-full px-4 py-3 text-lg border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm"
-              autoFocus
-            />
-            <p className="mt-2 text-xs text-gray-500">
-              Tip: You can type the main keyword(s) in the expected answer.
-            </p>
-            <button
-              onClick={handleSubmitAnswer}
-              disabled={userAnswer.trim().length === 0}
-              className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-xl shadow transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-            >
-              Submit
-            </button>
+        {/* Rating Buttons - only show when flipped */}
+        {isFlipped && (
+          <div className="mt-6 animate-in slide-in-from-bottom-4 duration-300" onClick={(e) => e.stopPropagation()}>
+            <p className="text-center text-sm text-slate-500 mb-3 font-medium">Bạn nhớ từ này như thế nào?</p>
+            <div className="grid grid-cols-4 gap-2 sm:gap-3">
+              {RATING_OPTIONS.map((option, idx) => (
+                <button
+                  key={option.label}
+                  onClick={(e) => { e.stopPropagation(); handleRating(option); }}
+                  disabled={isSubmittingReview}
+                  className={`flex flex-col items-center gap-1 py-3 sm:py-4 px-2 rounded-xl border-2 ${option.bgColor} ${option.borderColor} ${option.hoverBg} ${option.color} font-semibold transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
+                >
+                  <span className="text-xl sm:text-2xl">{option.icon}</span>
+                  <span className="text-xs sm:text-sm font-bold">{option.label}</span>
+                  <span className="text-[10px] sm:text-xs opacity-70 hidden sm:block">{option.description}</span>
+                  <kbd className="mt-1 px-1.5 py-0.5 bg-white/60 rounded text-[10px] font-mono opacity-50">{idx + 1}</kbd>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Next Button */}
-        {hasAnswered && (
-          <div className="mt-6 w-full max-w-lg mx-auto transition-all duration-300 opacity-100 translate-y-0">
-            <button
-              onClick={handleNext}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl shadow transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-            >
-              Next
-            </button>
-
-            <p className="text-center text-xs text-gray-400 mt-3">
-              Click the card to flip and review
-            </p>
-          </div>
-        )}
+        {/* Mini stats bar */}
+        <div className="mt-6 flex items-center justify-center gap-4 text-xs text-slate-400">
+          <span className="flex items-center gap-1">🔄 <span className="text-red-500 font-semibold">{stats.again}</span></span>
+          <span className="flex items-center gap-1">😓 <span className="text-orange-500 font-semibold">{stats.hard}</span></span>
+          <span className="flex items-center gap-1">👍 <span className="text-emerald-500 font-semibold">{stats.good}</span></span>
+          <span className="flex items-center gap-1">⚡ <span className="text-blue-500 font-semibold">{stats.easy}</span></span>
+        </div>
       </div>
     </div>
   );
