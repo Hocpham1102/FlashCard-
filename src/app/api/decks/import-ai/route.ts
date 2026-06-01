@@ -8,7 +8,17 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 // ─── Loại file hỗ trợ ────────────────────────────────────────────────
 // TEXT: đọc thẳng nội dung text → gửi vào prompt
-const TEXT_EXTS = new Set(["txt", "md", "csv", "json", "html", "htm", "xml", "yaml", "yml"]);
+const TEXT_EXTS = new Set([
+  "txt",
+  "md",
+  "csv",
+  "json",
+  "html",
+  "htm",
+  "xml",
+  "yaml",
+  "yml",
+]);
 // INLINE: encode base64 → Gemini đọc nội dung trực tiếp
 const INLINE_MIME: Record<string, string> = {
   pdf: "application/pdf",
@@ -58,6 +68,29 @@ function cleanJsonResponse(text: string): string {
   return s.trim();
 }
 
+async function generateContentWithRetry(model: any, parts: any[], retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await model.generateContent(parts);
+    } catch (error: any) {
+      const status = error?.status ?? error?.response?.status;
+      const isTransientGeminiError =
+        status === 503 ||
+        String(error?.message || "").includes("503") ||
+        String(error?.message || "").includes("Service Unavailable");
+
+      if (!isTransientGeminiError || attempt === retries) {
+        throw error;
+      }
+
+      const delayMs = 500 * 2 ** attempt;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw new Error("Unknown Gemini error");
+}
+
 export async function POST(req: NextRequest) {
   try {
     // ─── Auth ────────────────────────────────────────────────────────
@@ -69,7 +102,7 @@ export async function POST(req: NextRequest) {
     if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json(
         { error: "Chưa cấu hình GEMINI_API_KEY." },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -79,14 +112,17 @@ export async function POST(req: NextRequest) {
     const customTitle = (formData.get("title") as string | null)?.trim();
 
     if (!file) {
-      return NextResponse.json({ error: "Không tìm thấy file." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Không tìm thấy file." },
+        { status: 400 },
+      );
     }
 
     const MAX_SIZE = 20 * 1024 * 1024; // 20MB
     if (file.size > MAX_SIZE) {
       return NextResponse.json(
         { error: "File quá lớn. Tối đa 20MB." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -100,7 +136,10 @@ export async function POST(req: NextRequest) {
       // Đọc nội dung text và đưa vào prompt
       const text = await file.text();
       if (!text.trim()) {
-        return NextResponse.json({ error: "File rỗng, không có nội dung để phân tích." }, { status: 400 });
+        return NextResponse.json(
+          { error: "File rỗng, không có nội dung để phân tích." },
+          { status: 400 },
+        );
       }
       parts = [
         {
@@ -127,7 +166,7 @@ export async function POST(req: NextRequest) {
         {
           error: `File .${ext} không được hỗ trợ trực tiếp. Vui lòng chuyển sang PDF rồi thử lại (Mở file → In → Lưu dưới dạng PDF).`,
         },
-        { status: 400 }
+        { status: 400 },
       );
     } else {
       // Thử đọc như text cho mọi định dạng còn lại
@@ -144,13 +183,13 @@ export async function POST(req: NextRequest) {
           {
             error: `Định dạng file .${ext || "không xác định"} chưa được hỗ trợ. Thử chuyển sang PDF, TXT, hoặc ảnh chụp nội dung.`,
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
 
     // ─── Gọi Gemini ──────────────────────────────────────────────────
-    const result = await model.generateContent(parts);
+    const result = await generateContentWithRetry(model, parts);
     const rawText = result.response.text();
     const jsonText = cleanJsonResponse(rawText);
 
@@ -172,25 +211,32 @@ export async function POST(req: NextRequest) {
       console.error("Gemini raw response:", rawText);
       return NextResponse.json(
         { error: "AI trả về dữ liệu không đúng định dạng. Vui lòng thử lại." },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
-    if (!aiData.title || !Array.isArray(aiData.cards) || aiData.cards.length === 0) {
+    if (
+      !aiData.title ||
+      !Array.isArray(aiData.cards) ||
+      aiData.cards.length === 0
+    ) {
       return NextResponse.json(
-        { error: "AI không thể trích xuất nội dung từ file này. Hãy thử với file khác." },
-        { status: 500 }
+        {
+          error:
+            "AI không thể trích xuất nội dung từ file này. Hãy thử với file khác.",
+        },
+        { status: 500 },
       );
     }
 
     // Lọc thẻ hợp lệ
     const validCards = aiData.cards.filter(
-      (c) => c.front?.trim() && c.back?.trim()
+      (c) => c.front?.trim() && c.back?.trim(),
     );
     if (validCards.length === 0) {
       return NextResponse.json(
         { error: "Không tìm thấy thẻ hợp lệ trong kết quả AI." },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -234,25 +280,41 @@ export async function POST(req: NextRequest) {
           cardCount: deck.cardCount,
         },
       },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error: any) {
     console.error("AI import error:", error);
-    if (error?.message?.includes("API_KEY_INVALID") || error?.message?.includes("API key")) {
+    if (
+      error?.message?.includes("API_KEY_INVALID") ||
+      error?.message?.includes("API key")
+    ) {
       return NextResponse.json(
         { error: "API Key không hợp lệ. Kiểm tra GEMINI_API_KEY trong .env." },
-        { status: 500 }
+        { status: 500 },
+      );
+    }
+    if (
+      error?.status === 503 ||
+      String(error?.message || "").includes("503") ||
+      String(error?.message || "").includes("Service Unavailable")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Gemini đang quá tải hoặc tạm thời không khả dụng. Vui lòng thử lại sau ít phút.",
+        },
+        { status: 503 },
       );
     }
     if (error?.message?.includes("quota") || error?.status === 429) {
       return NextResponse.json(
         { error: "Đã vượt quá giới hạn API. Vui lòng thử lại sau vài phút." },
-        { status: 429 }
+        { status: 429 },
       );
     }
     return NextResponse.json(
       { error: error?.message || "Có lỗi xảy ra khi phân tích file." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

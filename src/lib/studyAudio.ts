@@ -1,3 +1,77 @@
+export function isSoundEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const v = localStorage.getItem("soundEnabled");
+    if (v === null) return true;
+    return v === "true";
+  } catch {
+    return true;
+  }
+}
+
+export function setSoundEnabled(enabled: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("soundEnabled", enabled ? "true" : "false");
+    window.dispatchEvent(new Event("soundSettingsChanged"));
+  } catch {}
+}
+
+export function isSpeechSynthesisSupported(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    "speechSynthesis" in window &&
+    typeof (window as any).SpeechSynthesisUtterance !== "undefined"
+  );
+}
+
+export function speakText(text: string, lang = "en-US") {
+  if (!isSpeechSynthesisSupported()) return;
+  try {
+    const Utter = (window as any).SpeechSynthesisUtterance;
+    const u = new Utter(text);
+    u.lang = lang;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u as SpeechSynthesisUtterance);
+  } catch {
+    // ignore
+  }
+}
+
+export function playFeedbackTone(
+  type: "correct" | "wrong" | "click" = "click",
+) {
+  if (typeof window === "undefined") return;
+  try {
+    const AudioCtx =
+      (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g);
+    g.connect(ctx.destination);
+    if (type === "correct") {
+      o.frequency.value = 880;
+    } else if (type === "wrong") {
+      o.frequency.value = 220;
+    } else {
+      o.frequency.value = 440;
+    }
+    g.gain.value = 0.001;
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    setTimeout(() => {
+      try {
+        o.stop();
+        ctx.close();
+      } catch {}
+    }, 300);
+  } catch {}
+}
+
+export default {};
 type FeedbackKind = "correct" | "wrong";
 
 interface SpeakOptions {
