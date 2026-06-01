@@ -42,7 +42,7 @@ export async function GET() {
     console.error("GET /api/admin/decks error:", error);
     return NextResponse.json(
       { error: "Không thể tải danh sách bộ thẻ" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

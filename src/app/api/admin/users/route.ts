@@ -37,7 +37,7 @@ export async function GET() {
     console.error("GET /api/admin/users error:", error);
     return NextResponse.json(
       { error: "Không thể tải danh sách người dùng" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

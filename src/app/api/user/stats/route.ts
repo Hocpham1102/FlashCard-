@@ -1,10 +1,10 @@
 export const dynamic = "force-dynamic";
 
+import { authOptions } from "@/lib/auth";
+import { getLevelProgress } from "@/lib/gamification";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import { getLevelProgress } from "@/lib/gamification";
 
 export async function GET() {
   try {
@@ -36,6 +36,9 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Fetch user stats error:", error);
-    return NextResponse.json({ error: "Failed to fetch stats" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch stats" },
+      { status: 500 },
+    );
   }
 }

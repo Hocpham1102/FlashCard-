@@ -1,10 +1,10 @@
 export const dynamic = "force-dynamic";
 
-import prisma from "@/lib/prisma";
-import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import prisma from "@/lib/prisma";
+import { format, subDays } from "date-fns";
+import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { subDays, format } from "date-fns";
 
 export async function GET() {
   try {
@@ -54,13 +54,13 @@ export async function GET() {
     // For now, let's just get the decks sorted by updated time.
     const recentDecks = await prisma.deck.findMany({
       where: { userId },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { updatedAt: "desc" },
       take: 3,
       select: {
         id: true,
         title: true,
         cardCount: true,
-      }
+      },
     });
 
     return NextResponse.json({
@@ -79,6 +79,9 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Fetch analytics error:", error);
-    return NextResponse.json({ error: "Failed to fetch analytics" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch analytics" },
+      { status: 500 },
+    );
   }
 }
