@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import {
   AreaChart,
   Area,
@@ -40,10 +41,16 @@ interface AnalyticsData {
 }
 
 export function DashboardStats() {
+  const { data: session, status } = useSession();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (status !== "authenticated") {
+      setLoading(false);
+      return;
+    }
+
     fetch("/api/user/analytics")
       .then((res) => res.json())
       .then((d) => {
@@ -51,7 +58,7 @@ export function DashboardStats() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [status]);
 
   if (loading) {
     return (
