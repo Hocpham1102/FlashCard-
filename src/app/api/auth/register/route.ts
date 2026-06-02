@@ -5,23 +5,29 @@ import bcrypt from "bcryptjs";
 export async function POST(req: Request) {
   try {
     const { name, username, password } = await req.json();
+    const normalizedName = typeof name === "string" ? name.trim() : name;
+    const normalizedUsername =
+      typeof username === "string" ? username.trim() : username;
 
-    if (!username || !password) {
+    if (!normalizedUsername || !password) {
       return NextResponse.json(
         { message: "Username and password are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
-      where: { username },
+      where: { username: normalizedUsername },
     });
 
     if (existingUser) {
       return NextResponse.json(
-        { message: "Tên đăng nhập này đã có người sử dụng. Vui lòng chọn tên khác." },
-        { status: 409 }
+        {
+          message:
+            "Tên đăng nhập này đã có người sử dụng. Vui lòng chọn tên khác.",
+        },
+        { status: 409 },
       );
     }
 
@@ -31,21 +37,28 @@ export async function POST(req: Request) {
     // Create user
     const newUser = await prisma.user.create({
       data: {
-        name,
-        username,
+        name: normalizedName,
+        username: normalizedUsername,
         password: hashedPassword,
       },
     });
 
     return NextResponse.json(
-      { message: "User registered successfully", user: { id: newUser.id, username: newUser.username, name: newUser.name } },
-      { status: 201 }
+      {
+        message: "User registered successfully",
+        user: {
+          id: newUser.id,
+          username: newUser.username,
+          name: newUser.name,
+        },
+      },
+      { status: 201 },
     );
   } catch (error) {
     console.error("Registration error:", error);
     return NextResponse.json(
       { message: "An error occurred during registration" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
