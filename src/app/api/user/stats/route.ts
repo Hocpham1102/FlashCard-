@@ -1,20 +1,23 @@
 export const dynamic = "force-dynamic";
 
-import { authOptions } from "@/lib/auth";
 import { getLevelProgress } from "@/lib/gamification";
 import prisma from "@/lib/prisma";
-import { getServerSession } from "next-auth";
+import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+    });
+
+    if (!token?.sub) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const stats = await prisma.userStats.findUnique({
-      where: { userId: session.user.id },
+      where: { userId: token.sub },
     });
 
     if (!stats) {
