@@ -1,11 +1,6 @@
 import Link from "next/link";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { UserAvatar } from "@/components/UserAvatar";
 
-export default async function LandingPage() {
-  const session = await getServerSession(authOptions);
-
+export default function LandingPage() {
   return (
     <div className="min-h-[calc(100vh-64px)] bg-slate-950 flex flex-col items-center relative overflow-hidden">
 
@@ -34,32 +29,20 @@ export default async function LandingPage() {
           Sử dụng sức mạnh của Flashcard và thuật toán lặp lại ngắt quãng (Spaced Repetition) để đẩy giới hạn ghi nhớ của não bộ lên mức tối đa.
         </p>
 
-        {session ? (
+        <div className="relative group">
+          {/* Glowing animated border behind the button */}
+          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-xl blur opacity-60 group-hover:opacity-100 transition duration-500 group-hover:duration-200 animate-tilt"></div>
+
           <Link
-            href="/dashboard"
-            className="group relative inline-flex items-center justify-center px-8 py-4 text-lg font-bold text-white transition-all duration-200 bg-indigo-600 font-pj rounded-xl hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 focus:ring-offset-slate-900 shadow-[0_0_40px_-10px_rgba(99,102,241,0.5)] hover:shadow-[0_0_60px_-15px_rgba(99,102,241,0.7)] hover:-translate-y-1"
+            href="/register"
+            className="relative inline-flex items-center justify-center px-10 py-5 text-xl font-bold text-white transition-all duration-200 bg-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 focus:ring-offset-slate-900 hover:bg-slate-800"
           >
-            Đi tới Dashboard của bạn
-            <svg className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            Bắt đầu hoàn toàn miễn phí
+            <svg className="w-6 h-6 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </Link>
-        ) : (
-          <div className="relative group">
-            {/* Glowing animated border behind the button */}
-            <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-xl blur opacity-60 group-hover:opacity-100 transition duration-500 group-hover:duration-200 animate-tilt"></div>
-
-            <Link
-              href="/register"
-              className="relative inline-flex items-center justify-center px-10 py-5 text-xl font-bold text-white transition-all duration-200 bg-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 focus:ring-offset-slate-900 hover:bg-slate-800"
-            >
-              Bắt đầu hoàn toàn miễn phí
-              <svg className="w-6 h-6 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </Link>
-          </div>
-        )}
+        </div>
 
         {/* Scroll indicator */}
         <div className="absolute bottom-12 left-1/2 -translate-x-1/2 animate-bounce text-slate-500">

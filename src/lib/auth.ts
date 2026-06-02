@@ -79,19 +79,6 @@ export const authOptions: NextAuthOptions = {
         token.role = userWithUsername.role ?? token.role;
       }
 
-      if (token.sub) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.sub },
-          select: { email: true, username: true, role: true },
-        });
-
-        if (dbUser) {
-          token.email = dbUser.email ?? token.email;
-          token.username = dbUser.username;
-          token.role = dbUser.role;
-        }
-      }
-
       token.isAdmin = canAccessAdminArea({
         role: token.role,
       });

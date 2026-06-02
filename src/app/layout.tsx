@@ -4,9 +4,7 @@ import { NavMenu } from "@/components/NavMenu";
 import { Providers } from "@/components/Providers";
 import { SoundToggle } from "@/components/SoundToggle";
 import { UserStatsDisplay } from "@/components/UserStatsDisplay";
-import { authOptions } from "@/lib/auth";
 import type { Metadata } from "next";
-import { getServerSession } from "next-auth";
 import { Inter } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
@@ -18,12 +16,11 @@ export const metadata: Metadata = {
   description: "A modern flashcard app for learning",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await getServerSession(authOptions);
   return (
     <html lang="en">
       <body
@@ -32,7 +29,7 @@ export default async function RootLayout({
         <Providers>
           <NavBar>
             <Link
-              href={session ? "/dashboard" : "/"}
+              href="/"
               className="text-xl font-bold tracking-tight hover:text-indigo-100 transition-colors"
             >
               FlashCard
