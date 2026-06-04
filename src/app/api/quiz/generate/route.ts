@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
         phonetic: true,
         example: true,
         partOfSpeech: true,
+        synonyms: true,
       },
     });
 
@@ -56,11 +57,36 @@ export async function POST(request: NextRequest) {
 
       switch (type) {
         case "multiple_choice": {
-          // Show English word -> pick correct Vietnamese meaning
-          const options = [
-            { text: card.back, isCorrect: true },
-            ...wrongOptions.map((w) => ({ text: w.back, isCorrect: false })),
-          ].sort(() => Math.random() - 0.5);
+          let options: { text: string; isCorrect: boolean }[] = [];
+
+          if (card.synonyms) {
+            try {
+              const parsedOptions = JSON.parse(card.synonyms);
+              if (Array.isArray(parsedOptions) && parsedOptions.length >= 2) {
+                options = parsedOptions.map((opt: string) => ({
+                  text: opt,
+                  isCorrect: opt === card.back,
+                }));
+                
+                // Ensure at least one correct option exists
+                if (!options.some((o) => o.isCorrect)) {
+                  options[0] = { text: card.back, isCorrect: true };
+                }
+                
+                options = options.sort(() => Math.random() - 0.5);
+              }
+            } catch (e) {
+              // Ignore parse error, fallback to default behavior
+            }
+          }
+
+          if (options.length === 0) {
+            // Show English word -> pick correct Vietnamese meaning (or fallback for MCQs)
+            options = [
+              { text: card.back, isCorrect: true },
+              ...wrongOptions.map((w) => ({ text: w.back, isCorrect: false })),
+            ].sort(() => Math.random() - 0.5);
+          }
 
           return {
             cardId: card.id,

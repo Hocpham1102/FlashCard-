@@ -34,10 +34,15 @@ const INLINE_MIME: Record<string, string> = {
 const GEMINI_PROMPT = `Bạn là chuyên gia giáo dục. Hãy phân tích nội dung tài liệu được cung cấp và tạo ra một bộ flashcard học tập chất lượng cao.
 
 Yêu cầu:
-- Tạo 10–25 thẻ từ những khái niệm, từ vựng, hoặc kiến thức quan trọng nhất trong tài liệu
-- Mỗi thẻ cần có: front (thuật ngữ/câu hỏi ngắn), back (định nghĩa/đáp án bằng tiếng Việt, rõ ràng)
-- Nếu là từ vựng tiếng Anh: thêm phonetic (phiên âm IPA) và example (câu ví dụ)
-- Nếu là kiến thức/khái niệm: front là câu hỏi, back là giải thích ngắn gọn
+- Trích xuất TỐI ĐA 100 câu hỏi trắc nghiệm, thuật ngữ, từ vựng hoặc khái niệm quan trọng.
+- Nếu tài liệu là bộ câu hỏi trắc nghiệm:
+  + "front": nội dung câu hỏi
+  + "back": đáp án đúng (chứa cả ký tự A/B/C/D và nội dung)
+  + "options": mảng chứa tất cả 4 lựa chọn (A, B, C, D...) đầy đủ nội dung.
+- Nếu tài liệu là từ vựng/khái niệm thông thường:
+  + "front": thuật ngữ/câu hỏi
+  + "back": định nghĩa/đáp án
+  + "options": mảng rỗng []
 
 Trả về CHÍNH XÁC định dạng JSON sau (không có markdown, không có text thừa):
 {
@@ -45,8 +50,9 @@ Trả về CHÍNH XÁC định dạng JSON sau (không có markdown, không có 
   "description": "Mô tả ngắn (1 câu)",
   "cards": [
     {
-      "front": "thuật ngữ hoặc câu hỏi",
-      "back": "định nghĩa hoặc đáp án bằng tiếng Việt",
+      "front": "thuật ngữ hoặc nội dung câu hỏi",
+      "back": "định nghĩa hoặc đáp án đúng",
+      "options": ["A. đáp án 1", "B. đáp án 2", "C. đáp án 3", "D. đáp án 4"],
       "phonetic": "/phiên âm IPA/ (để trống nếu không phải từ vựng tiếng Anh)",
       "example": "câu ví dụ (để trống nếu không cần thiết)",
       "partOfSpeech": "noun/verb/adj/... (để trống nếu không phải từ vựng)"
@@ -199,6 +205,7 @@ export async function POST(req: NextRequest) {
       cards: {
         front: string;
         back: string;
+        options?: string[];
         phonetic?: string;
         example?: string;
         partOfSpeech?: string;
@@ -262,7 +269,7 @@ export async function POST(req: NextRequest) {
           phonetic: card.phonetic?.trim() || "",
           example: card.example?.trim() || "",
           partOfSpeech: card.partOfSpeech?.trim() || "",
-          synonyms: "",
+          synonyms: card.options && card.options.length > 0 ? JSON.stringify(card.options.map(opt => opt.trim())) : "",
           collocations: "",
           toeicPart: "",
         })),

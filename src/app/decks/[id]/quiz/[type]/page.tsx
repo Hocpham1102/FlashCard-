@@ -103,7 +103,7 @@ export default function QuizPlayPage() {
 
   function startTimer() {
     if (timerRef.current) clearInterval(timerRef.current);
-    const initialTime = quizType === "fill_blank" ? 30 : 15;
+    const initialTime = 30; // Tăng thời gian mặc định lên 30s cho tất cả các loại quiz
     setTimer(initialTime);
     timerRef.current = setInterval(() => {
       setTimer((prev) => {
